@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ar" translate="no" class="notranslate">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="google" content="notranslate" />
+    <!-- Android/PWA App Mode -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#09090b" />
+    <!-- iOS Web App Mode -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MUSIC LOG" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="https://img.icons8.com/color/192/audio-wave.png" />
+    
+    <!-- Bulletproof variables for lamejs to prevent MPEGMode/Lame strict mode ReferenceErrors -->
+    <script>
+      (function() {
+        var mpegObj = {
+          STEREO: 0,
+          JOINT_STEREO: 1,
+          DUAL_CHANNEL: 2,
+          MONO: 3,
+          NOT_SET: 4
+        };
+        window.MPEGMode = window.MPEGMode || mpegObj;
+        window.Lame = window.Lame || {};
+        window.LAME = window.LAME || {};
+        
+        // Expose as global var variables in the script scope so strict mode strictness never triggers a ReferenceError
+        window['MPEGMode'] = window.MPEGMode;
+        window['Lame'] = window.Lame;
+        window['LAME'] = window.LAME;
+      })();
+    </script>
+    <script>
+      var MPEGMode = window.MPEGMode;
+      var Lame = window.Lame;
+      var LAME = window.LAME;
+    </script>
+
+    <!-- Load official pre-built browser-safe lamejs binary (evaluated non-strictly) -->
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+    <script>
+      // Fallback in case of temporary CDN delay
+      if (!window.lamejs && typeof window.Mp3Encoder === "undefined") {
+        var script = document.createElement('script');
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js";
+        document.head.appendChild(script);
+      }
+    </script>
+
+    <title>MUSIC LOG - Slowed & Reverb Studio</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker Auto Registered!', reg.scope))
+            .catch(err => console.error('Service Worker registration failed: ', err));
+        });
+      }
+    </script>
+  </body>
+</html>
+
