@@ -59,7 +59,7 @@ export default function SplashEntrance({ onEnter, lang, setLang }: SplashEntranc
       <div className="w-full max-w-5xl flex justify-between items-center z-10 pt-4 px-4">
         <div className="px-3.5 py-1.5 bg-white/5 border border-white/10 rounded-full text-[10px] font-mono tracking-widest text-indigo-300 uppercase shadow-md backdrop-blur-md flex items-center gap-2 select-none">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>{lang === "ar" ? "إصدار v3.10.2" : "MUSIC LOG v3.10.2"}</span>
+          <span>{lang === "ar" ? "إصدار v3.10.8" : "MUSIC LOG v3.10.8"}</span>
         </div>
         <button
           onClick={() => setLang(lang === "ar" ? "en" : "ar")}

@@ -882,8 +882,9 @@ export default function App() {
     if (!audioContextRef.current) {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       audioContextRef.current = new AudioCtx({
-        sampleRate: 44100,
-        latencyHint: "balanced" // Balanced latency minimizes CPU stutters and eliminates crackling/stuttering on both wired and wireless headphones!
+        // Do NOT force a sampleRate. Letting it default to the output hardware's native sample rate (e.g. 48000Hz on iOS/macOS with AirPods)
+        // completely eliminates the resampling delay layer, which is the #1 cause of Bluetooth crackling/stuttering!
+        latencyHint: "playback" // Playback latency maximizes buffer sizes, ensuring maximum resilience against CPU stutters and AirPods audio dropouts on all phones!
       });
     }
     return audioContextRef.current;
@@ -1251,107 +1252,111 @@ export default function App() {
                 let album: string | undefined = dbT.album;
                 let id3Data: Uint8Array | undefined = undefined;
                 
-                try {
-                  const arrayBufferForMeta = await dbT.fileData.arrayBuffer();
-                  const u8 = new Uint8Array(arrayBufferForMeta);
-                  
-                  if (u8[0] === 0x49 && u8[1] === 0x44 && u8[2] === 0x33) {
-                    const b0 = u8[6];
-                    const b1 = u8[7];
-                    const b2 = u8[8];
-                    const b3 = u8[9];
-                    const size = ((b0 & 0x7F) << 21) | ((b1 & 0x7F) << 14) | ((b2 & 0x7F) << 7) | (b3 & 0x7F);
-                    const totalSize = size + 10;
-                    if (totalSize <= u8.length) {
-                      id3Data = u8.slice(0, totalSize);
-                      const meta = parseAudioMetadata(id3Data);
-                      coverUrl = meta.coverUrl || coverUrl;
-                      if (meta.artist) artist = meta.artist;
-                      if (meta.album) album = meta.album;
+                // If the track is already fully cataloged, do NOT read the heavy file data at all on startup!
+                // This makes startup and transition instantaneous!
+                if (!coverUrl || coverUrl.includes("unsplash.com") || coverUrl.includes("placeholder")) {
+                  try {
+                    const arrayBufferForMeta = await dbT.fileData.arrayBuffer();
+                    const u8 = new Uint8Array(arrayBufferForMeta);
+                    
+                    if (u8[0] === 0x49 && u8[1] === 0x44 && u8[2] === 0x33) {
+                      const b0 = u8[6];
+                      const b1 = u8[7];
+                      const b2 = u8[8];
+                      const b3 = u8[9];
+                      const size = ((b0 & 0x7F) << 21) | ((b1 & 0x7F) << 14) | ((b2 & 0x7F) << 7) | (b3 & 0x7F);
+                      const totalSize = size + 10;
+                      if (totalSize <= u8.length) {
+                        id3Data = u8.slice(0, totalSize);
+                        const meta = parseAudioMetadata(id3Data);
+                        coverUrl = meta.coverUrl || coverUrl;
+                        if (meta.artist) artist = meta.artist;
+                        if (meta.album) album = meta.album;
+                      }
+                    } else {
+                      // Check for WAV embedded ID3 chunk
+                      for (let i = 0; i < u8.length - 8; i++) {
+                        if (u8[i] === 0x69 && u8[i+1] === 0x64 && u8[i+2] === 0x33 && u8[i+3] === 0x20) {
+                          const chunkSize = u8[i+4] | (u8[i+5] << 8) | (u8[i+6] << 16) | (u8[i+7] << 24);
+                          const startOffset = i + 8;
+                          if (startOffset + chunkSize <= u8.length) {
+                            const subChunk = u8.slice(startOffset, startOffset + chunkSize);
+                            if (subChunk[0] === 0x49 && subChunk[1] === 0x44 && subChunk[2] === 0x33) {
+                              id3Data = subChunk;
+                              const meta = parseAudioMetadata(id3Data);
+                              coverUrl = meta.coverUrl || coverUrl;
+                              if (meta.artist) artist = meta.artist;
+                              if (meta.album) album = meta.album;
+                            }
+                          }
+                          break;
+                        }
+                      }
                     }
-                  } else {
-                    // Check for WAV embedded ID3 chunk
-                    for (let i = 0; i < u8.length - 8; i++) {
-                      if (u8[i] === 0x69 && u8[i+1] === 0x64 && u8[i+2] === 0x33 && u8[i+3] === 0x20) {
-                        const chunkSize = u8[i+4] | (u8[i+5] << 8) | (u8[i+6] << 16) | (u8[i+7] << 24);
-                        const startOffset = i + 8;
-                        if (startOffset + chunkSize <= u8.length) {
-                          const subChunk = u8.slice(startOffset, startOffset + chunkSize);
-                          if (subChunk[0] === 0x49 && subChunk[1] === 0x44 && subChunk[2] === 0x33) {
-                            id3Data = subChunk;
-                            const meta = parseAudioMetadata(id3Data);
-                            coverUrl = meta.coverUrl || coverUrl;
-                            if (meta.artist) artist = meta.artist;
-                            if (meta.album) album = meta.album;
+                    
+                    // If cover url is missing, fallback to iTunes Search API
+                    if (!coverUrl || coverUrl.includes("unsplash.com") || coverUrl.includes("placeholder")) {
+                      try {
+                        const searchResult = await searchAndFetchCoverArt(dbT.name, artist);
+                        if (searchResult) {
+                          coverUrl = searchResult.coverUrl;
+                          if (searchResult.artist) artist = searchResult.artist;
+                          if (searchResult.album) album = searchResult.album;
+                        }
+                      } catch (itErr) {
+                        console.warn("iTunes searching failed during loader resurrection:", itErr);
+                      }
+                    }
+                    
+                    if (!coverUrl) {
+                      coverUrl = generateDefaultCoverUrl(dbT.name);
+                    } else if (!coverUrl.startsWith("data:")) {
+                      try {
+                        const fetchedBytes = await fetchImageBytes(coverUrl);
+                        if (fetchedBytes && fetchedBytes.bytes && fetchedBytes.bytes.length > 0) {
+                          coverUrl = bytesToDataUrl(fetchedBytes.bytes, fetchedBytes.mimeType);
+                        }
+                      } catch (fetchErr) {
+                        console.warn("Could not pre-fetch external cover artwork to base64 on startup:", fetchErr);
+                      }
+                    }
+                    
+                    // Re-inject ID3 tags permanently inside raw file data if it was modified
+                    if (dbT.coverUrl !== coverUrl || dbT.artist !== artist || dbT.album !== album) {
+                      dbT.coverUrl = coverUrl;
+                      dbT.artist = artist;
+                      dbT.album = album;
+                      
+                      try {
+                        const updatedBytes = await embedId3MetadataInAudioFile(
+                          u8,
+                          dbT.name,
+                          artist || "",
+                          album || "MusicLog",
+                          coverUrl
+                        );
+                        dbT.fileData = new File([updatedBytes], (dbT.fileData as any).name || `${dbT.name}.mp3`, { type: dbT.fileData.type });
+                        
+                        // Update id3Data reference
+                        if (updatedBytes[0] === 0x49 && updatedBytes[1] === 0x44 && updatedBytes[2] === 0x33) {
+                          const b0 = updatedBytes[6];
+                          const b1 = updatedBytes[7];
+                          const b2 = updatedBytes[8];
+                          const b3 = updatedBytes[9];
+                          const size = ((b0 & 0x7F) << 21) | ((b1 & 0x7F) << 14) | ((b2 & 0x7F) << 7) | (b3 & 0x7F);
+                          const totalSize = size + 10;
+                          if (totalSize <= updatedBytes.length) {
+                            id3Data = updatedBytes.slice(0, totalSize);
                           }
                         }
-                        break;
+                      } catch (embErr) {
+                        console.warn("Loader tagging inject failed:", embErr);
                       }
+                      await saveTrackToDB(dbT);
                     }
+                  } catch (metaErr) {
+                    console.warn("Could not read ID3 metadata from file on startup:", metaErr);
                   }
-                  
-                  // If cover url is missing or is general Unsplash, fallback to iTunes Search API
-                  if (!coverUrl || coverUrl.includes("unsplash.com") || coverUrl.includes("placeholder")) {
-                    try {
-                      const searchResult = await searchAndFetchCoverArt(dbT.name, artist);
-                      if (searchResult) {
-                        coverUrl = searchResult.coverUrl;
-                        if (searchResult.artist) artist = searchResult.artist;
-                        if (searchResult.album) album = searchResult.album;
-                      }
-                    } catch (itErr) {
-                      console.warn("iTunes searching failed during loader resurrection:", itErr);
-                    }
-                  }
-                  
-                  if (!coverUrl) {
-                    coverUrl = generateDefaultCoverUrl(dbT.name);
-                  } else if (!coverUrl.startsWith("data:")) {
-                    try {
-                      const fetchedBytes = await fetchImageBytes(coverUrl);
-                      if (fetchedBytes && fetchedBytes.bytes && fetchedBytes.bytes.length > 0) {
-                        coverUrl = bytesToDataUrl(fetchedBytes.bytes, fetchedBytes.mimeType);
-                      }
-                    } catch (fetchErr) {
-                      console.warn("Could not pre-fetch external cover artwork to base64 on startup:", fetchErr);
-                    }
-                  }
-                  
-                  // Re-inject ID3 tags permanently inside raw file data if it was modified
-                  if (dbT.coverUrl !== coverUrl || dbT.artist !== artist || dbT.album !== album) {
-                    dbT.coverUrl = coverUrl;
-                    dbT.artist = artist;
-                    dbT.album = album;
-                    
-                    try {
-                      const updatedBytes = await embedId3MetadataInAudioFile(
-                        u8,
-                        dbT.name,
-                        artist || "",
-                        album || "MusicLog",
-                        coverUrl
-                      );
-                      dbT.fileData = new File([updatedBytes], (dbT.fileData as any).name || `${dbT.name}.mp3`, { type: dbT.fileData.type });
-                      
-                      // Update id3Data reference
-                      if (updatedBytes[0] === 0x49 && updatedBytes[1] === 0x44 && updatedBytes[2] === 0x33) {
-                        const b0 = updatedBytes[6];
-                        const b1 = updatedBytes[7];
-                        const b2 = updatedBytes[8];
-                        const b3 = updatedBytes[9];
-                        const size = ((b0 & 0x7F) << 21) | ((b1 & 0x7F) << 14) | ((b2 & 0x7F) << 7) | (b3 & 0x7F);
-                        const totalSize = size + 10;
-                        if (totalSize <= updatedBytes.length) {
-                          id3Data = updatedBytes.slice(0, totalSize);
-                        }
-                      }
-                    } catch (embErr) {
-                      console.warn("Loader tagging inject failed:", embErr);
-                    }
-                    await saveTrackToDB(dbT);
-                  }
-                } catch (metaErr) {
-                  console.warn("Could not resurrect cover art for track:", dbT.name, metaErr);
                 }
 
                 if (!coverUrl) {
@@ -1738,6 +1743,13 @@ export default function App() {
     
     const decodeNextIdle = async (index: number) => {
       if (isCancelled || index >= customTracksToDecode.length) return;
+      
+      // If a song is actively playing, postpone background idle decoding to prevent CPU-bound audio stuttering!
+      if (isPlayingRef.current) {
+        setTimeout(() => decodeNextIdle(index), 1000);
+        return;
+      }
+
       const track = customTracksToDecode[index];
       const docBlob = track.fileBlob || track.file;
       
@@ -1841,7 +1853,7 @@ export default function App() {
 
   useEffect(() => {
     if (gainNodeRef.current && audioContextRef.current) {
-      gainNodeRef.current.gain.setTargetAtTime(volume / 100, audioContextRef.current.currentTime, 0.015);
+      gainNodeRef.current.gain.setTargetAtTime((volume / 100) * 1.6, audioContextRef.current.currentTime, 0.015);
     }
   }, [volume]);
 
@@ -2311,7 +2323,7 @@ export default function App() {
 
       // Main Gain Mixer
       const mainGain = ctx.createGain();
-      mainGain.gain.setValueAtTime(volume / 100, ctx.currentTime);
+      mainGain.gain.setValueAtTime((volume / 100) * 1.6, ctx.currentTime);
 
       // Spectrum Analyser Node
       const analyser = ctx.createAnalyser();
@@ -2721,7 +2733,7 @@ export default function App() {
       wetGain.gain.setValueAtTime((reverb / 100) * 0.9, 0);
 
       const mainGain = offlineCtx.createGain();
-      mainGain.gain.setValueAtTime(volume / 100, 0);
+      mainGain.gain.setValueAtTime((volume / 100) * 1.6, 0);
 
       let sourceNodeEnd: AudioNode = source;
       if (deCrackle) {
@@ -3857,7 +3869,7 @@ export default function App() {
                   <span>{t.title}</span>
                   <span className="font-light opacity-60 text-xs align-top bg-purple-500/15 text-purple-300 px-1 rounded">PRO</span>
                   <span className="px-1.5 py-0.5 rounded bg-indigo-550/15 border border-indigo-500/20 text-indigo-300 text-[9px] not-italic font-mono uppercase tracking-widest scale-95 origin-left">
-                    {lang === "ar" ? "إصدار v3.10.2" : "v3.10.2"}
+                    {lang === "ar" ? "إصدار v3.10.8" : "v3.10.8"}
                   </span>
                 </h1>
                 <p className="text-[10px] text-white/55 font-semibold max-sm:hidden">
@@ -5218,7 +5230,6 @@ export default function App() {
           <button
             id="tab-vocal-splitter"
             onClick={() => {
-              pauseTrackFully(); // Stop standard audio playback to prevent overlapping sounds
               setActiveTab("vocal-splitter");
             }}
             className={`flex flex-col items-center gap-1 transition-all cursor-pointer ${

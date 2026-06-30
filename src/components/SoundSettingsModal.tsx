@@ -13,7 +13,11 @@ import {
   Sparkle,
   Flame,
   Music,
-  Crown
+  Crown,
+  Facebook,
+  Youtube,
+  Instagram,
+  Info
 } from "lucide-react";
 import AudioVisualizer from "./AudioVisualizer";
 
@@ -131,7 +135,7 @@ export default function SoundSettingsModal({
 
   const isRtl = lang === "ar";
   const [shareSuccess, setShareSuccess] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<"fx" | "theme" | "eq">("fx");
+  const [activeTab, setActiveTab] = React.useState<"fx" | "theme" | "eq" | "about">("fx");
 
   const handleShare = async () => {
     const shareData = {
@@ -272,7 +276,8 @@ export default function SoundSettingsModal({
           {[
             { id: "fx", nameAr: "مؤثرات ذكية ✨", nameEn: "Smart FX ✨" },
             { id: "eq", nameAr: "معدل الترددات 🎛️", nameEn: "Equalizer 🎛️" },
-            { id: "theme", nameAr: "المظهر وعينات الألوان 🎨", nameEn: "Themes 🎨" }
+            { id: "theme", nameAr: "المظهر وعينات الألوان 🎨", nameEn: "Themes 🎨" },
+            { id: "about", nameAr: "من نحن ℹ️", nameEn: "About ℹ️" }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -570,7 +575,7 @@ export default function SoundSettingsModal({
                 </div>
 
                 {/* Draw 5 Visual Vertical sliders like mixing consol desks! */}
-                <div className="flex justify-between items-center h-48 bg-black/25 rounded-2xl p-4 sm:p-5 border border-white/5 relative">
+                <div className="flex justify-between items-center h-76 bg-black/35 rounded-2xl p-4 sm:p-5 border border-white/5 relative overflow-hidden">
                   {/* Decorative horizontal centerline */}
                   <div className="absolute left-0 right-0 top-1/2 h-[1px] bg-white/5 pointer-events-none" />
                   
@@ -581,13 +586,23 @@ export default function SoundSettingsModal({
                     { freq: "4kHz", labelAr: "وضوح الكلمات", val: eq4k, set: setEq4k },
                     { freq: "14kHz", labelAr: "الهواء واللمعان", val: eq14k, set: setEq14k }
                   ].map((band, idx) => (
-                    <div key={idx} className="flex flex-col items-center justify-between h-full w-1/5">
-                      <span className="text-[9px] font-mono text-emerald-400 font-bold bg-[#151722] px-1 rounded-md">
+                    <div key={idx} className="flex flex-col items-center justify-between h-full w-1/5 select-none relative z-10">
+                      {/* Value Indicator with glowing style */}
+                      <span className="text-[9px] font-mono font-black px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 shadow-md">
                         {band.val > 0 ? `+${band.val}` : band.val}
                       </span>
                       
-                      {/* Vertical input slider */}
-                      <div className="h-28 flex items-center justify-center my-1 relative">
+                      {/* Tactile PLUS button */}
+                      <button
+                        type="button"
+                        onClick={() => band.set(Math.min(12, band.val + 1))}
+                        className="w-6.5 h-6.5 rounded-full bg-white/5 border border-white/10 hover:bg-indigo-500/20 active:scale-90 flex items-center justify-center text-white/90 hover:text-white text-xs font-black transition-all cursor-pointer mt-1.5 shadow-sm"
+                      >
+                        +
+                      </button>
+
+                      {/* Vertical input slider wrapper with touch-action: none to prevent page scrolling */}
+                      <div className="h-32 flex items-center justify-center my-2 relative touch-none" style={{ touchAction: "none" }}>
                         <input
                           dir="ltr"
                           type="range"
@@ -598,15 +613,26 @@ export default function SoundSettingsModal({
                           onChange={(e) => band.set(parseInt(e.target.value))}
                           style={{
                             writingMode: "vertical-lr",
-                            direction: "rtl"
+                            direction: "rtl",
+                            touchAction: "none"
                           }}
-                          className="h-full w-4 cursor-pointer outline-none appearance-none bg-white/5 accent-indigo-500 custom-3d-slider"
+                          {...({ orient: "vertical" } as any)}
+                          className="h-full w-4 cursor-pointer outline-none appearance-none vertical-eq-slider"
                         />
                       </div>
+
+                      {/* Tactile MINUS button */}
+                      <button
+                        type="button"
+                        onClick={() => band.set(Math.max(-12, band.val - 1))}
+                        className="w-6.5 h-6.5 rounded-full bg-white/5 border border-white/10 hover:bg-indigo-500/20 active:scale-90 flex items-center justify-center text-white/90 hover:text-white text-xs font-black transition-all cursor-pointer mb-1.5 shadow-sm"
+                      >
+                        −
+                      </button>
                       
                       <div className="flex flex-col items-center">
                         <span className="text-[10px] sm:text-xxs font-black text-white">{band.freq}</span>
-                        <span className="text-[8px] text-white/35 font-bold hidden sm:inline truncate max-w-[50px]">
+                        <span className="text-[8px] text-white/35 font-bold hidden sm:inline truncate max-w-[50px] mt-0.5">
                           {lang === "ar" ? band.labelAr : band.freq === "60Hz" ? "Deep Bass" : band.freq === "230Hz" ? "Mid Bass" : band.freq === "910Hz" ? "Vocal Mid" : band.freq === "4kHz" ? "Presence" : "High Sparkle"}
                         </span>
                       </div>
@@ -714,6 +740,197 @@ export default function SoundSettingsModal({
                       : (lang === "ar" ? "مشاركة التطبيق مع الأصدقاء" : "Share this application with friends")}
                   </span>
                 </button>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 4: ABOUT US */}
+          {activeTab === "about" && (
+            <div className="space-y-6 animate-[fadeIn_0.2s_ease-out]">
+              
+              {/* Premium 3D Holographic Introduction Card */}
+              <div className={`p-6 rounded-3xl border relative overflow-hidden transition-all duration-300 transform hover:scale-[1.02] shadow-2xl ${
+                theme === "white" 
+                  ? "bg-gradient-to-br from-white via-slate-50 to-indigo-50/30 border-slate-200/80 text-slate-800 shadow-slate-200/50" 
+                  : theme === "gold"
+                  ? "bg-gradient-to-br from-amber-950/40 via-amber-900/10 to-amber-950/50 border-amber-500/30 text-amber-100 shadow-amber-500/10"
+                  : "bg-gradient-to-br from-slate-900 via-[#131520] to-[#1a1c30] border-indigo-500/20 text-white shadow-indigo-500/5"
+              }`}>
+                {/* Glossy Refraction Light Overlay */}
+                <div className="absolute top-0 left-0 w-full h-[150%] bg-gradient-to-b from-white/10 via-transparent to-transparent -skew-y-12 pointer-events-none origin-top-left" />
+                
+                {/* Pulse Light Ring Accent */}
+                <div className="absolute -top-12 -right-12 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl animate-pulse" />
+                <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl animate-pulse" />
+
+                <div className="flex flex-col items-center text-center space-y-4 select-none relative z-10">
+                  {/* Glowing 3D Rotating Logo Frame */}
+                  <div className={`w-16 h-16 rounded-2.5xl flex items-center justify-center transition-all duration-500 hover:rotate-6 ${
+                    theme === "gold" 
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-[0_0_20px_rgba(245,158,11,0.35)]" 
+                      : "bg-indigo-600/25 text-indigo-300 border border-indigo-400/30 shadow-[0_0_25px_rgba(99,102,241,0.4)]"
+                  }`}>
+                    <Music className="w-8 h-8 animate-bounce" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-base font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-200 to-purple-200 drop-shadow-md">
+                      {lang === "ar" ? "استوديو MUSIC LOG الفائق 🎙️💜" : "MUSIC LOG Studio Premium 🎙️💜"}
+                    </h4>
+                    <span className="inline-block px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm animate-pulse">
+                      {lang === "ar" ? "الإصدار الذهبي والاحترافي" : "GOLD & PRO EDITION"}
+                    </span>
+                    <p className={`text-[11px] leading-relaxed max-w-sm mx-auto font-medium ${
+                      theme === "white" ? "text-slate-600" : "text-white/70"
+                    }`}>
+                      {lang === "ar" 
+                        ? "استوديو متكامل ومحمول لتعديل المسارات الصوتية والموسيقى بتأثيرات الـ Slowed & Reverb الأفضل على الإطلاق، مع ميزة التضخيم الفائق وفصل المسارات بدقة فائقة وبصورة فورية مذهلة."
+                        : "A fully integrated audio suite to modify your music with top-tier Slowed & Reverb effects, ultra bass-boosting, and high-fidelity vocal splitting instantly."}
+                    </p>
+                  </div>
+
+                  {/* 3D Glass Tech Badge Row */}
+                  <div className="flex gap-2 w-full justify-center pt-2">
+                    <span className="px-2.5 py-1 text-[8.5px] font-mono font-bold rounded-lg bg-black/40 border border-white/5 text-emerald-400">
+                      LIVE DETECTOR
+                    </span>
+                    <span className="px-2.5 py-1 text-[8.5px] font-mono font-bold rounded-lg bg-black/40 border border-white/5 text-indigo-400">
+                      3D ACOUSTICS
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Creator Connections with interactive 3D Buttons */}
+              <div className="space-y-4">
+                <div className={`flex items-center gap-2 ${isRtl ? "flex-row-reverse" : "flex-row"}`}>
+                  <div className="w-1.5 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
+                  <span className={`text-xs font-black uppercase tracking-wider ${theme === "white" ? "text-slate-600" : "text-white/80"}`}>
+                    {lang === "ar" ? "تواصل مع المطور والناشر 🌐" : "Connect with the Creator 🌐"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  
+                  {/* Facebook Link - Beautiful Custom 3D Card with Gradient Border */}
+                  <a
+                    href="https://www.facebook.com/0xv9dax9en"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group block relative rounded-2xl p-0.5 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  >
+                    {/* Glowing neon background wrapper on hover */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl opacity-10 group-hover:opacity-100 blur transition-opacity duration-300 pointer-events-none" />
+                    
+                    <div className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${
+                      theme === "white"
+                        ? "bg-white border-slate-200/85 text-[#1877F2] shadow-sm"
+                        : "bg-black/40 hover:bg-black/60 border-white/5 text-white shadow-xl"
+                    }`}>
+                      <div className={`flex items-center gap-3.5 ${isRtl ? "flex-row-reverse" : "flex-row"}`}>
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400 border border-blue-500/25 group-hover:bg-[#1877F2] group-hover:text-white transition-all duration-300 shadow-md">
+                          <Facebook className="w-5 h-5 fill-current" />
+                        </div>
+                        <div className={isRtl ? "text-right" : "text-left"}>
+                          <h5 className="text-xs font-black tracking-wide group-hover:text-blue-400 transition-colors">
+                            {lang === "ar" ? "الحساب الشخصي على فيسبوك 👤" : "Facebook Profile 👤"}
+                          </h5>
+                          <p className={`text-[9px] font-mono mt-0.5 ${theme === "white" ? "text-slate-500" : "text-white/50"}`}>
+                            facebook.com/0xv9dax9en
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
+                          {isRtl ? "←" : "→"}
+                        </span>
+                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 group-hover:bg-[#1877F2] group-hover:text-white transition-all">
+                          FOLLOW
+                        </span>
+                      </div>
+                    </div>
+                  </a>
+
+                  {/* YouTube Link - Hot Glowing Red Card */}
+                  <a
+                    href="https://youtube.com/@okbatech?si=T_Bako-YE7BTpCKo"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group block relative rounded-2xl p-0.5 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  >
+                    {/* YouTube Hot Red Glow */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-rose-600 rounded-2xl opacity-10 group-hover:opacity-100 blur transition-opacity duration-300 pointer-events-none" />
+                    
+                    <div className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${
+                      theme === "white"
+                        ? "bg-white border-slate-200/85 text-[#FF0000] shadow-sm"
+                        : "bg-black/40 hover:bg-black/60 border-white/5 text-white shadow-xl"
+                    }`}>
+                      <div className={`flex items-center gap-3.5 ${isRtl ? "flex-row-reverse" : "flex-row"}`}>
+                        <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center text-red-400 border border-red-500/25 group-hover:bg-[#FF0000] group-hover:text-white transition-all duration-300 shadow-md">
+                          <Youtube className="w-5 h-5" />
+                        </div>
+                        <div className={isRtl ? "text-right" : "text-left"}>
+                          <h5 className="text-xs font-black tracking-wide group-hover:text-red-400 transition-colors">
+                            {lang === "ar" ? "قناة اليوتيوب الرسمية 📺" : "Official YouTube Channel 📺"}
+                          </h5>
+                          <p className={`text-[9px] font-mono mt-0.5 ${theme === "white" ? "text-slate-500" : "text-white/50"}`}>
+                            youtube.com/@okbatech
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
+                          {isRtl ? "←" : "→"}
+                        </span>
+                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-red-500/10 text-red-400 group-hover:bg-[#FF0000] group-hover:text-white transition-all">
+                          SUBSCRIBE
+                        </span>
+                      </div>
+                    </div>
+                  </a>
+
+                  {/* Instagram Link - Warm Vibrant Gradient Pink Glow */}
+                  <a
+                    href="https://www.instagram.com/okba_tech?igsh=bThwcGt3dmlscjR2"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group block relative rounded-2xl p-0.5 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  >
+                    {/* Instagram Warm pink glow */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-500 via-purple-500 to-amber-500 rounded-2xl opacity-10 group-hover:opacity-100 blur transition-opacity duration-300 pointer-events-none" />
+                    
+                    <div className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${
+                      theme === "white"
+                        ? "bg-white border-slate-200/85 text-[#E1306C] shadow-sm"
+                        : "bg-black/40 hover:bg-black/60 border-white/5 text-white shadow-xl"
+                    }`}>
+                      <div className={`flex items-center gap-3.5 ${isRtl ? "flex-row-reverse" : "flex-row"}`}>
+                        <div className="w-10 h-10 rounded-xl bg-pink-500/15 flex items-center justify-center text-pink-400 border border-pink-500/25 group-hover:bg-gradient-to-tr group-hover:from-amber-500 group-hover:via-purple-600 group-hover:to-pink-500 group-hover:text-white transition-all duration-300 shadow-md">
+                          <Instagram className="w-5 h-5" />
+                        </div>
+                        <div className={isRtl ? "text-right" : "text-left"}>
+                          <h5 className="text-xs font-black tracking-wide group-hover:text-pink-400 transition-colors">
+                            {lang === "ar" ? "الحساب الشخصي على انستغرام 📸" : "Instagram Profile 📸"}
+                          </h5>
+                          <p className={`text-[9px] font-mono mt-0.5 ${theme === "white" ? "text-slate-500" : "text-white/50"}`}>
+                            instagram.com/okba_tech
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
+                          {isRtl ? "←" : "→"}
+                        </span>
+                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-pink-500/10 text-pink-400 group-hover:bg-[#E1306C] group-hover:text-white transition-all">
+                          VISIT
+                        </span>
+                      </div>
+                    </div>
+                  </a>
+
+                </div>
               </div>
 
             </div>
